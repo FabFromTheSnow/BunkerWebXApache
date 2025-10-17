@@ -1,0 +1,92 @@
+x-bw-env: &bw-env
+  API_WHITELIST_IP: "127.0.0.0/8 10.20.30.0/24"
+  DATABASE_URI: "postgresql://bunkerweb:***@bw-db:5432/db"
+
+services:
+  bunkerweb:
+    image: bunkerity/bunkerweb:latest
+    ports:
+      - "80:8080/tcp"
+      - "443:8443/tcp"
+      - "443:8443/udp"
+    environment:
+      <<: *bw-env
+    restart: unless-stopped
+    networks:
+      - bunker
+      - bw-apps
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "10"
+
+  bw-scheduler:
+    image: bunkerity/bunkerweb-scheduler:latest
+    environment:
+      <<: *bw-env
+      BUNKERWEB_INSTANCES: "bunkerweb"
+      SERVER_NAME: ""
+      MULTISITE: "yes"
+      UI_HOST: "http://bw-ui:7000"
+    volumes:
+      - bw-data:/data
+    restart: unless-stopped
+    networks:
+      - bunker
+      - bunker-db
+
+  bw-ui:
+    image: bunkerity/bunkerweb-ui:latest
+    environment:
+      <<: *bw-env
+    restart: unless-stopped
+    networks:
+      - bunker
+      - bunker-db
+
+  bw-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: "db"
+      POSTGRES_USER: "bunkerweb"
+      POSTGRES_PASSWORD: "***"
+    volumes:
+      - bw-dbdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - bunker-db
+
+  apache:
+    image: httpd:2.4
+    container_name: apache-hosted
+    networks:
+      - bw-apps
+    ports:
+      - "7443:443"
+      - "8081:80"
+    restart: unless-stopped
+    volumes:
+      - /var/www/html:/usr/local/apache2/htdocs
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  bunker:
+    name: bunker
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.20.30.0/24
+  bunker-db:
+    name: bunker-db
+  bw-apps:
+    name: bw-apps
+    external: true
+
+volumes:
+  bw-data:
+  bw-dbdata:
